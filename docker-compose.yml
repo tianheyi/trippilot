@@ -1,0 +1,49 @@
+# Local development stack.
+#
+#   make up        # start in the background
+#   make down      # stop (add -v to drop the database volume)
+#
+# The credentials below are throwaway values for a local database bound to
+# localhost. They are not secrets and must never be reused outside this file --
+# real deployments inject TRIPPILOT_DATABASE_URL from their own secret store.
+
+name: trippilot
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      TRIPPILOT_APP_ENV: local
+      TRIPPILOT_DEBUG: "false"
+      TRIPPILOT_LOG_LEVEL: INFO
+      # json keeps container logs parseable by `docker compose logs | jq`.
+      TRIPPILOT_LOG_FORMAT: json
+      # Points at the `db` service. The application still opens no connection,
+      # so /ready reports the database as `not_configured` even with this set.
+      TRIPPILOT_DATABASE_URL: postgresql+asyncpg://trippilot:trippilot@db:5432/trippilot
+    # No `depends_on: db` on purpose. The API does not talk to the database
+    # yet, so a hard dependency would only make `docker compose up api`
+    # slower and more fragile while implying a link that does not exist.
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: trippilot
+      POSTGRES_PASSWORD: trippilot
+      POSTGRES_DB: trippilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - trippilot-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trippilot -d trippilot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  trippilot-pgdata:
